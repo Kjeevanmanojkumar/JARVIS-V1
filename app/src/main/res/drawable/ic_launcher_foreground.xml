@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Outer HUD Reticle Circle -->
+    <path
+        android:pathData="M54,26 A28,28 0 1,1 53.99,26"
+        android:strokeWidth="1.2"
+        android:strokeColor="#8000E5FF"
+        android:fillColor="#00000000" />
+
+    <!-- Cardinal Technical Notches -->
+    <path
+        android:pathData="M54,22 L54,27 M54,81 L54,86 M22,54 L27,54 M81,54 L86,54"
+        android:strokeWidth="2.0"
+        android:strokeColor="#FF00E5FF" />
+
+    <!-- 45-degree angle tick marks -->
+    <path
+        android:pathData="M33,33 L36,36 M75,33 L72,36 M33,75 L36,72 M75,75 L72,72"
+        android:strokeWidth="1.5"
+        android:strokeColor="#AA00E5FF" />
+
+    <!-- Middle Segmented Reactor Ring -->
+    <path
+        android:pathData="M54,34 A20,20 0 1,1 53.99,34"
+        android:strokeWidth="2.2"
+        android:strokeColor="#DD00E5FF"
+        android:fillColor="#00000000" />
+
+    <!-- Inner Energy Chamber Background -->
+    <path
+        android:pathData="M54,40 A14,14 0 1,1 53.99,40"
+        android:fillColor="#3300E5FF"
+        android:strokeWidth="1.2"
+        android:strokeColor="#FF00E5FF" />
+
+    <!-- Inner Core Orb -->
+    <path
+        android:pathData="M54,47 A7,7 0 1,1 53.99,47"
+        android:fillColor="#FF00E5FF" />
+
+    <!-- Bright White Core Center Spark -->
+    <path
+        android:pathData="M54,50.5 A3.5,3.5 0 1,1 53.99,50.5"
+        android:fillColor="#FFFFFFFF" />
+
+    <!-- Tech Crosshair Line Center -->
+    <path
+        android:pathData="M42,54 L46,54 M62,54 L66,54 M54,42 L54,46 M54,62 L54,66"
+        android:strokeWidth="1.2"
+        android:strokeColor="#FFFFFFFF" />
+</vector>

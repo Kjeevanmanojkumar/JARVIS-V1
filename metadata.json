@@ -1,0 +1,6 @@
+{
+  "name": "JARVIS V1",
+  "description": "Futuristic mobile AI assistant with HUD interface, voice pipeline, Room persistent memory, and Android tool execution.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
