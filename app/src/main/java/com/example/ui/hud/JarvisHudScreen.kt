@@ -137,7 +137,7 @@ fun JarvisHudScreen(
             val stateColor = when (jarvisState) {
                 JarvisState.IDLE -> JarvisCyan
                 JarvisState.LISTENING -> Color.White
-                JarvisState.THINKING -> JarvisCyanLight
+                JarvisState.THINKING, JarvisState.PROCESSING -> JarvisCyanLight
                 JarvisState.SPEAKING -> JarvisOnlineGreen
                 JarvisState.EXECUTING -> JarvisWarningAmber
                 JarvisState.ERROR -> JarvisAlertRed

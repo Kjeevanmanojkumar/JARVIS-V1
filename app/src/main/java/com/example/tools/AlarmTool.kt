@@ -1,5 +1,6 @@
 package com.example.tools
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.provider.AlarmClock
@@ -42,26 +43,24 @@ class AlarmTool(private val context: Context) : JarvisTool {
             return ToolResult(false, "Invalid minute: $minutesRaw. Must be between 0 and 59.")
         }
 
-        return try {
-            val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
-                putExtra(AlarmClock.EXTRA_HOUR, hourRaw)
-                putExtra(AlarmClock.EXTRA_MINUTES, minutesRaw)
-                putExtra(AlarmClock.EXTRA_MESSAGE, label)
-                putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+        val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+            putExtra(AlarmClock.EXTRA_HOUR, hourRaw)
+            putExtra(AlarmClock.EXTRA_MINUTES, minutesRaw)
+            putExtra(AlarmClock.EXTRA_MESSAGE, label)
+            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
 
-            if (intent.resolveActivity(context.packageManager) != null) {
-                context.startActivity(intent)
-                val formattedTime = String.format(Locale.US, "%02d:%02d", hourRaw, minutesRaw)
-                ToolResult(
-                    true,
-                    "Alarm scheduled for $formattedTime with label '$label'.",
-                    mapOf("hour" to hourRaw, "minutes" to minutesRaw, "label" to label)
-                )
-            } else {
-                ToolResult(false, "No alarm application found on device to handle alarm scheduling.")
-            }
+        return try {
+            context.startActivity(intent)
+            val formattedTime = String.format(Locale.US, "%02d:%02d", hourRaw, minutesRaw)
+            ToolResult(
+                true,
+                "Alarm scheduled for $formattedTime with label '$label'.",
+                mapOf("hour" to hourRaw, "minutes" to minutesRaw, "label" to label)
+            )
+        } catch (e: ActivityNotFoundException) {
+            ToolResult(false, "No alarm clock application found on this device to handle alarm scheduling.")
         } catch (e: Exception) {
             ToolResult(false, "Error scheduling alarm: ${e.message}")
         }

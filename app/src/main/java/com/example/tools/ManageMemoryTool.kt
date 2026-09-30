@@ -16,7 +16,7 @@ class ManageMemoryTool(private val memoryRepository: MemoryRepository) : JarvisT
         ToolParameter(
             name = "key",
             type = "string",
-            description = "The subject or identifier of the memory (e.g. 'project', 'user_name', 'favorite_color', 'car').",
+            description = "The subject or identifier of the memory (e.g. 'project', 'android project', 'user_name', 'car').",
             required = false
         ),
         ToolParameter(
@@ -48,7 +48,7 @@ class ManageMemoryTool(private val memoryRepository: MemoryRepository) : JarvisT
                     memoryRepository.saveMemory(key, value, category)
                     ToolResult(
                         true,
-                        "Memory stored: remembered that '$key' is '$value' under ${category.displayName}.",
+                        "I'll remember that your $key is $value.",
                         mapOf("key" to key, "value" to value, "category" to category.name)
                     )
                 }
@@ -63,17 +63,21 @@ class ManageMemoryTool(private val memoryRepository: MemoryRepository) : JarvisT
                     if (mem != null) {
                         ToolResult(
                             true,
-                            "Recalled memory for '$key': ${mem.memoryValue} (${mem.category}).",
+                            "Your ${mem.memoryKey} is ${mem.memoryValue}.",
                             mapOf("key" to key, "value" to mem.memoryValue, "category" to mem.category)
                         )
                     } else {
-                        // Search partial
+                        // Partial search
                         val related = memoryRepository.getRelevantMemories(key, limit = 3)
-                        if (related.isNotEmpty()) {
-                            val relSummary = related.joinToString(", ") { "${it.memoryKey}=${it.memoryValue}" }
-                            ToolResult(true, "Found related memories: $relSummary", mapOf("matches" to related.size))
+                        val match = related.firstOrNull()
+                        if (match != null) {
+                            ToolResult(
+                                true,
+                                "Your ${match.memoryKey} is ${match.memoryValue}.",
+                                mapOf("key" to match.memoryKey, "value" to match.memoryValue, "category" to match.category)
+                            )
                         } else {
-                            ToolResult(false, "No record found in memory for '$key'.")
+                            ToolResult(false, "I don't have any record of your '$key'.")
                         }
                     }
                 }
@@ -82,9 +86,16 @@ class ManageMemoryTool(private val memoryRepository: MemoryRepository) : JarvisT
                 if (key.isEmpty()) {
                     ToolResult(false, "Key parameter is required to forget a memory.")
                 } else {
-                    val deleted = memoryRepository.deleteMemoryByKey(key)
+                    var deleted = memoryRepository.deleteMemoryByKey(key)
+                    if (!deleted) {
+                        // Try searching for relevant key to delete
+                        val related = memoryRepository.getRelevantMemories(key, limit = 1)
+                        if (related.isNotEmpty()) {
+                            deleted = memoryRepository.deleteMemoryByKey(related[0].memoryKey)
+                        }
+                    }
                     if (deleted) {
-                        ToolResult(true, "Successfully purged memory for '$key'.", mapOf("key" to key))
+                        ToolResult(true, "I have forgotten your $key.", mapOf("key" to key))
                     } else {
                         ToolResult(false, "Could not find any memory matching '$key' to delete.")
                     }

@@ -4,93 +4,201 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.MediaStore
+import android.provider.Settings
+import android.util.Log
 
 class OpenAppTool(private val context: Context) : JarvisTool {
     override val name = "open_app"
-    override val description = "Launches an installed Android application by name (e.g. YouTube, Chrome, Settings, Camera, Maps, Spotify, Calculator)."
+    override val description = "Launches an installed Android application by name (e.g. WhatsApp, YouTube, Chrome, Instagram, Spotify, Google Maps, Camera, Settings, Calculator)."
     override val parameters = listOf(
         ToolParameter(
             name = "app_name",
             type = "string",
-            description = "The common name of the application to open (e.g., 'YouTube', 'Chrome', 'Settings', 'Camera', 'Maps', 'Calculator').",
+            description = "The common name of the application to open (e.g., 'WhatsApp', 'YouTube', 'Chrome', 'Instagram', 'Spotify', 'Google Maps', 'Camera', 'Settings', 'Calculator').",
             required = true
         )
     )
 
     override suspend fun execute(arguments: Map<String, Any?>): ToolResult {
-        val appName = arguments["app_name"]?.toString()?.trim()
+        val rawInput = arguments["app_name"]?.toString()?.trim()
             ?: return ToolResult(false, "Application name parameter is required.")
 
-        val pm = context.packageManager
-        val query = appName.lowercase()
-
-        // Known direct package shortcuts for speed and accuracy
-        val packageMap = mapOf(
-            "youtube" to "com.google.android.youtube",
-            "chrome" to "com.android.chrome",
-            "browser" to "com.android.chrome",
-            "maps" to "com.google.android.apps.maps",
-            "google maps" to "com.google.android.apps.maps",
-            "gmail" to "com.google.android.gm",
-            "mail" to "com.google.android.gm",
-            "camera" to "camera_fallback",
-            "settings" to "com.android.settings",
-            "calculator" to "com.google.android.calculator",
-            "clock" to "com.google.android.deskclock",
-            "calendar" to "com.google.android.calendar",
-            "photos" to "com.google.android.apps.photos",
-            "play store" to "com.android.vending",
-            "spotify" to "com.spotify.music"
-        )
-
-        // Try direct shortcut if available
-        val directPkg = packageMap[query]
-        if (directPkg != null && directPkg != "camera_fallback") {
-            val intent = pm.getLaunchIntentForPackage(directPkg)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                return ToolResult(true, "Launching $appName.")
-            }
+        // Clean query: strip punctuation like trailing periods, exclamation marks, etc.
+        val query = rawInput.trimEnd('.', '!', '?', ',', ';').trim().lowercase()
+        if (query.isEmpty()) {
+            return ToolResult(false, "Application name parameter is empty.")
         }
 
-        // Special handling for camera
-        if (query.contains("camera")) {
-            val cameraIntent = Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply {
+        val pm = context.packageManager
+
+        // 1. WhatsApp & WhatsApp Business specific handling
+        if (query == "whatsapp" || query == "what's app" || query.contains("whatsapp") || query == "wa") {
+            // Check consumer WhatsApp first, then WhatsApp Business
+            val whatsAppPackages = listOf("com.whatsapp", "com.whatsapp.w4b")
+            for (pkg in whatsAppPackages) {
+                if (isPackageInstalled(pm, pkg)) {
+                    val launchIntent = pm.getLaunchIntentForPackage(pkg)
+                    if (launchIntent != null) {
+                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        return try {
+                            context.startActivity(launchIntent)
+                            val variant = if (pkg == "com.whatsapp.w4b") "WhatsApp Business" else "WhatsApp"
+                            ToolResult(true, "Opening $variant.", mapOf("package" to pkg, "app" to variant))
+                        } catch (e: Exception) {
+                            ToolResult(false, "Failed to launch WhatsApp: ${e.message}")
+                        }
+                    }
+                }
+            }
+            return ToolResult(false, "WhatsApp is not installed on this device.")
+        }
+
+        // 2. Camera special intent handling
+        if (query == "camera" || query.contains("camera")) {
+            val cameraIntent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            if (cameraIntent.resolveActivity(pm) != null) {
+            try {
                 context.startActivity(cameraIntent)
-                return ToolResult(true, "Launching Camera.")
+                return ToolResult(true, "Opening Camera.", mapOf("action" to "camera"))
+            } catch (e: Exception) {
+                Log.w(TAG, "Direct camera intent failed, searching installed apps", e)
             }
         }
 
-        // Search installed launcher apps
-        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
+        // 3. Settings shortcut
+        if (query == "settings" || query == "system settings") {
+            val settingsIntent = Intent(Settings.ACTION_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            return try {
+                context.startActivity(settingsIntent)
+                ToolResult(true, "Opening Settings.", mapOf("action" to "settings"))
+            } catch (e: Exception) {
+                ToolResult(false, "Failed to launch Settings: ${e.message}")
+            }
         }
 
-        val resolveInfos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            pm.queryIntentActivities(mainIntent, PackageManager.ResolveInfoFlags.of(0))
-        } else {
-            @Suppress("DEPRECATION")
-            pm.queryIntentActivities(mainIntent, 0)
-        }
+        // 4. Known aliases & direct packages
+        val knownPackages = mapOf(
+            "youtube" to "com.google.android.youtube",
+            "chrome" to "com.android.chrome",
+            "google chrome" to "com.android.chrome",
+            "browser" to "com.android.chrome",
+            "instagram" to "com.instagram.android",
+            "spotify" to "com.spotify.music",
+            "maps" to "com.google.android.apps.maps",
+            "google maps" to "com.google.android.apps.maps",
+            "calculator" to "com.google.android.calculator",
+            "gmail" to "com.google.android.gm",
+            "mail" to "com.google.android.gm",
+            "photos" to "com.google.android.apps.photos",
+            "google photos" to "com.google.android.apps.photos",
+            "clock" to "com.google.android.deskclock",
+            "calendar" to "com.google.android.calendar",
+            "play store" to "com.android.vending",
+            "google play" to "com.android.vending",
+            "telegram" to "org.telegram.messenger",
+            "twitter" to "com.twitter.android",
+            "x" to "com.twitter.android"
+        )
 
-        for (info in resolveInfos) {
-            val label = info.loadLabel(pm).toString().lowercase()
-            val pkg = info.activityInfo.packageName.lowercase()
-
-            if (label.contains(query) || query.contains(label) || pkg.contains(query)) {
-                val launchIntent = pm.getLaunchIntentForPackage(info.activityInfo.packageName)
-                if (launchIntent != null) {
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val targetPkg = knownPackages[query]
+        if (targetPkg != null && isPackageInstalled(pm, targetPkg)) {
+            val launchIntent = pm.getLaunchIntentForPackage(targetPkg)
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                return try {
                     context.startActivity(launchIntent)
-                    return ToolResult(true, "Launching ${info.loadLabel(pm)}.")
+                    val label = try {
+                        pm.getApplicationLabel(pm.getApplicationInfo(targetPkg, 0)).toString()
+                    } catch (e: Exception) {
+                        rawInput
+                    }
+                    ToolResult(true, "Opening $label.", mapOf("package" to targetPkg, "app" to label))
+                } catch (e: Exception) {
+                    ToolResult(false, "Failed to launch $rawInput: ${e.message}")
                 }
             }
         }
 
-        return ToolResult(false, "Application '$appName' could not be found or launched on this device.")
+        // 5. Dynamic search through installed launcher applications
+        val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+
+        val resolveInfos = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.queryIntentActivities(launcherIntent, PackageManager.ResolveInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.queryIntentActivities(launcherIntent, 0)
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        // Find best match: exact label match > label starts with > label contains > package contains
+        var bestPkg: String? = null
+        var bestLabel: String? = null
+
+        for (info in resolveInfos) {
+            val appLabel = info.loadLabel(pm).toString()
+            val labelLower = appLabel.lowercase()
+            val pkgLower = info.activityInfo.packageName.lowercase()
+
+            if (labelLower == query) {
+                bestPkg = info.activityInfo.packageName
+                bestLabel = appLabel
+                break
+            }
+            if (bestPkg == null && (labelLower.startsWith(query) || labelLower.contains(query))) {
+                bestPkg = info.activityInfo.packageName
+                bestLabel = appLabel
+            }
+            if (bestPkg == null && pkgLower.contains(query)) {
+                bestPkg = info.activityInfo.packageName
+                bestLabel = appLabel
+            }
+        }
+
+        if (bestPkg != null) {
+            val launchIntent = pm.getLaunchIntentForPackage(bestPkg)
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                return try {
+                    context.startActivity(launchIntent)
+                    ToolResult(true, "Opening ${bestLabel ?: rawInput}.", mapOf("package" to bestPkg, "app" to bestLabel))
+                } catch (e: Exception) {
+                    ToolResult(false, "Failed to launch ${bestLabel ?: rawInput}: ${e.message}")
+                }
+            }
+        }
+
+        return ToolResult(
+            false,
+            "Application '$rawInput' is not installed or cannot be launched on this device."
+        )
+    }
+
+    private fun isPackageInstalled(pm: PackageManager, packageName: String): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getPackageInfo(packageName, 0)
+            }
+            true
+        } catch (e: PackageManager.NameNotFoundException) {
+            false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    companion object {
+        private const val TAG = "OpenAppTool"
     }
 }

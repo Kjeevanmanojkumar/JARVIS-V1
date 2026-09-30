@@ -24,8 +24,9 @@ import com.example.telemetry.SystemMonitor
 import com.example.tools.ToolRegistry
 import com.example.ui.settings.JarvisSettings
 import com.example.ui.settings.SettingsRepository
-import com.example.voice.SpeechRecognizerManager
 import com.example.voice.TextToSpeechManager
+import com.example.voice.whisper.WhisperModelStatus
+import com.example.voice.whisper.WhisperSpeechEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class JarvisViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -84,15 +86,21 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     val recentMessages: StateFlow<List<MessageEntity>> = conversationRepository.getGlobalRecentMessages(8)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Voice Managers
-    private var speechRecognizerManager: SpeechRecognizerManager? = null
+    // Voice Engines
+    private var whisperSpeechEngine: WhisperSpeechEngine? = null
     private var textToSpeechManager: TextToSpeechManager? = null
+
+    val whisperModelStatus: StateFlow<WhisperModelStatus> get() =
+        whisperSpeechEngine?.modelStatus ?: MutableStateFlow(WhisperModelStatus.NotDownloaded).asStateFlow()
+
+    // Guard against duplicate concurrent command execution
+    private val isExecutingCommand = AtomicBoolean(false)
 
     init {
         systemMonitor.start()
         initializeConversation()
         initTextToSpeech()
-        initSpeechRecognizer()
+        initWhisperEngine()
     }
 
     private fun initializeConversation() {
@@ -117,9 +125,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun initSpeechRecognizer() {
-        speechRecognizerManager = SpeechRecognizerManager(
+    private fun initWhisperEngine() {
+        whisperSpeechEngine = WhisperSpeechEngine(
             context = getApplication(),
+            scope = viewModelScope,
             onResult = { recognizedText ->
                 _audioLevel.value = 0f
                 submitCommand(recognizedText)
@@ -148,55 +157,87 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    fun downloadWhisperModel(onProgress: ((Float) -> Unit)? = null, onComplete: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch {
+            val success = whisperSpeechEngine?.modelManager?.downloadModel(onProgress) ?: false
+            onComplete?.invoke(success)
+        }
+    }
+
     fun toggleListening() {
         triggerHaptic()
         if (_jarvisState.value == JarvisState.LISTENING) {
-            speechRecognizerManager?.stopListening()
+            whisperSpeechEngine?.stopListening()
             _jarvisState.value = JarvisState.IDLE
         } else {
             // Stop TTS if speaking before listening
             textToSpeechManager?.stop()
             _jarvisState.value = JarvisState.LISTENING
-            speechRecognizerManager?.startListening()
+            whisperSpeechEngine?.startListening()
         }
     }
 
     fun submitCommand(commandText: String) {
-        if (commandText.isBlank()) return
-        triggerHaptic()
+        val trimmed = commandText.trim()
+        if (trimmed.isBlank()) return
 
         // Stop any current voice operations
-        speechRecognizerManager?.stopListening()
+        whisperSpeechEngine?.stopListening()
         textToSpeechManager?.stop()
 
-        _latestUserText.value = commandText
+        // Handle direct stop speaking command
+        val cleanCmd = trimmed.trimEnd('.', '!', '?', ',', ';').lowercase()
+        if (cleanCmd == "stop speaking" || cleanCmd == "stop talking" || cleanCmd == "silence") {
+            stopSpeaking()
+            _latestUserText.value = trimmed
+            _latestResponseText.value = "Speech transmission halted."
+            _jarvisState.value = JarvisState.IDLE
+            return
+        }
+
+        // Prevent duplicate concurrent command submissions
+        if (!isExecutingCommand.compareAndSet(false, true)) {
+            Log.w(TAG, "Command execution already in progress, dropping duplicate submit: $trimmed")
+            return
+        }
+
+        triggerHaptic()
+        _latestUserText.value = trimmed
         _jarvisState.value = JarvisState.THINKING
 
         viewModelScope.launch(Dispatchers.IO) {
-            val convId = _activeConversationId.value
-            val currentSettings = settings.value
-            val isOnline = telemetry.value.isOnline
+            try {
+                val convId = _activeConversationId.value
+                val currentSettings = settings.value
+                val isOnline = telemetry.value.isOnline
 
-            aiEngine.processCommand(
-                userText = commandText,
-                conversationId = convId,
-                apiKey = currentSettings.apiKey,
-                modelName = currentSettings.modelName,
-                customPrompt = currentSettings.customSystemPrompt,
-                isOnline = isOnline,
-                onStateChanged = { newState ->
-                    _jarvisState.value = newState
-                },
-                onResponseReady = { responseText, speakText ->
-                    _latestResponseText.value = responseText
+                aiEngine.processCommand(
+                    userText = trimmed,
+                    conversationId = convId,
+                    apiKey = currentSettings.apiKey,
+                    modelName = currentSettings.modelName,
+                    customPrompt = currentSettings.customSystemPrompt,
+                    isOnline = isOnline,
+                    onStateChanged = { newState ->
+                        _jarvisState.value = newState
+                    },
+                    onResponseReady = { responseText, speakText ->
+                        _latestResponseText.value = responseText
 
-                    if (currentSettings.voiceEnabled) {
-                        textToSpeechManager?.speak(cleanTextForSpeech(speakText))
-                    } else {
-                        _jarvisState.value = JarvisState.IDLE
+                        if (currentSettings.voiceEnabled) {
+                            val spoke = textToSpeechManager?.speak(cleanTextForSpeech(speakText)) ?: false
+                            if (!spoke) {
+                                // Fallback to IDLE if TTS failed to synthesize
+                                _jarvisState.value = JarvisState.IDLE
+                            }
+                        } else {
+                            _jarvisState.value = JarvisState.IDLE
+                        }
                     }
-                }
-            )
+                )
+            } finally {
+                isExecutingCommand.set(false)
+            }
         }
     }
 
@@ -267,7 +308,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun cleanTextForSpeech(text: String): String {
-        // Remove markdown bullets and technical symbols for natural audio flow
         return text.replace("•", "")
             .replace("*", "")
             .replace("#", "")
@@ -278,8 +318,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     override fun onCleared() {
         super.onCleared()
-        speechRecognizerManager?.destroy()
+        whisperSpeechEngine?.destroy()
         textToSpeechManager?.destroy()
         systemMonitor.stop()
+    }
+
+    companion object {
+        private const val TAG = "JarvisViewModel"
     }
 }

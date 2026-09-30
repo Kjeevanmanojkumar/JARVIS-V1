@@ -45,7 +45,7 @@ fun HudWaveform(
     val (lineColor, centerGlow) = when (state) {
         JarvisState.IDLE -> Pair(JarvisCyanDark.copy(alpha = 0.5f), JarvisCyan)
         JarvisState.LISTENING -> Pair(JarvisCyan, Color.White)
-        JarvisState.THINKING -> Pair(JarvisCyanLight, JarvisCyanDark)
+        JarvisState.THINKING, JarvisState.PROCESSING -> Pair(JarvisCyanLight, JarvisCyanDark)
         JarvisState.SPEAKING -> Pair(Color.White, JarvisCyan)
         JarvisState.EXECUTING -> Pair(JarvisWarningAmber, JarvisCyan)
         JarvisState.ERROR -> Pair(JarvisAlertRed, Color.White)
@@ -65,7 +65,7 @@ fun HudWaveform(
         val baseAmplitude = when (state) {
             JarvisState.IDLE -> 3.dp.toPx()
             JarvisState.LISTENING -> (8.dp.toPx() + audioLevel * 20.dp.toPx()).coerceAtMost(height / 2f - 4f)
-            JarvisState.THINKING -> 8.dp.toPx()
+            JarvisState.THINKING, JarvisState.PROCESSING -> 8.dp.toPx()
             JarvisState.SPEAKING -> 14.dp.toPx()
             JarvisState.EXECUTING -> 6.dp.toPx()
             JarvisState.ERROR -> 4.dp.toPx()

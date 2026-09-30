@@ -2,11 +2,14 @@ package com.example.ui.settings
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,14 +26,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -41,8 +46,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -52,28 +56,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.example.ui.components.HudPanel
+import com.example.ui.components.GlassCard
+import com.example.ui.components.NeonButton
+import com.example.ui.components.NeonButtonStyle
 import com.example.ui.hud.JarvisViewModel
 import com.example.ui.theme.JarvisAlertRed
-import com.example.ui.theme.JarvisCyan
-import com.example.ui.theme.JarvisCyanLight
-import com.example.ui.theme.JarvisGlassBorder
-import com.example.ui.theme.JarvisGlassSurface
-import com.example.ui.theme.JarvisObsidian
+import com.example.ui.theme.JarvisBackground
+import com.example.ui.theme.JarvisBorder
+import com.example.ui.theme.JarvisBorderCyan
+import com.example.ui.theme.JarvisBrightCyan
 import com.example.ui.theme.JarvisOnlineGreen
-import com.example.ui.theme.JarvisTextPrimary
-import com.example.ui.theme.JarvisTextSecondary
-import com.example.ui.theme.JarvisWarningAmber
+import com.example.ui.theme.JarvisPrimaryCyan
+import com.example.ui.theme.JarvisSecondaryText
+import com.example.ui.theme.JarvisSurface
+import com.example.ui.theme.JarvisWhite
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: JarvisViewModel,
@@ -85,6 +92,9 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsState()
     val allMemories by viewModel.allMemories.collectAsState()
 
+    var activeDialog by remember { mutableStateOf<String?>(null) }
+
+    // Dialog state holders
     var apiKeyInput by remember(settings.apiKey) { mutableStateOf(settings.apiKey) }
     var apiKeyVisible by remember { mutableStateOf(false) }
     var customPromptInput by remember(settings.customSystemPrompt) { mutableStateOf(settings.customSystemPrompt) }
@@ -100,54 +110,38 @@ fun SettingsScreen(
         )
     }
 
-    var hasCallPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.CALL_PHONE
-            ) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
     val micLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasMicPermission = granted
     }
 
-    val callLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCallPermission = granted
-    }
-
     Scaffold(
-        containerColor = JarvisObsidian,
+        containerColor = JarvisBackground,
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "SYSTEM CONFIGURATION",
-                        color = JarvisCyan,
-                        fontSize = 16.sp,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = JarvisBrightCyan
                     )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = JarvisCyan
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = JarvisGlassSurface
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Text(
+                    text = "Settings",
+                    color = JarvisWhite,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
                 )
-            )
+            }
         }
     ) { innerPadding ->
         Column(
@@ -155,332 +149,379 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 1. AI BRAIN SECTION
-            HudPanel(title = "AI Brain Configuration") {
-                Text(
-                    text = "PROVIDER: Google Gemini REST API (Primary) + Local Offline Engine (Fallback)",
-                    color = JarvisTextSecondary,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-                Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-                // API Key field
-                OutlinedTextField(
-                    value = apiKeyInput,
-                    onValueChange = {
-                        apiKeyInput = it
-                        viewModel.updateApiKey(it)
-                    },
-                    label = { Text("Gemini API Key", color = JarvisTextSecondary, fontSize = 12.sp) },
-                    visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
-                            Icon(
-                                imageVector = if (apiKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = "Toggle visibility",
-                                tint = JarvisCyan
+            // Row 1: AI & App Settings
+            SettingsRowCard(
+                icon = Icons.Default.AutoAwesome,
+                iconBg = Color(0xFF059669),
+                title = "AI & App Settings",
+                subtitle = "Manage your API key and AI configuration",
+                onClick = { activeDialog = "ai" }
+            )
+
+            // Row 2: Permissions
+            SettingsRowCard(
+                icon = Icons.Default.Security,
+                iconBg = Color(0xFF7C3AED),
+                title = "Permissions",
+                subtitle = "Microphone, Notifications, Overlay",
+                onClick = { activeDialog = "permissions" }
+            )
+
+            // Row 3: Appearance
+            SettingsRowCard(
+                icon = Icons.Default.Palette,
+                iconBg = Color(0xFFEA580C),
+                title = "Appearance",
+                subtitle = "Theme, Voice rate, Pitch",
+                onClick = { activeDialog = "appearance" }
+            )
+
+            // Row 4: Data & Privacy
+            SettingsRowCard(
+                icon = Icons.Default.Lock,
+                iconBg = Color(0xFF2563EB),
+                title = "Data & Privacy",
+                subtitle = "Manage your data (${allMemories.size} memories)",
+                onClick = { activeDialog = "data" }
+            )
+
+            // Row 5: Backup & Sync
+            SettingsRowCard(
+                icon = Icons.Default.CloudSync,
+                iconBg = Color(0xFF16A34A),
+                title = "Backup & Sync",
+                subtitle = "Keep your data safe",
+                onClick = { activeDialog = "backup" }
+            )
+
+            // Row 6: About
+            SettingsRowCard(
+                icon = Icons.Default.Info,
+                iconBg = Color(0xFF0284C7),
+                title = "About",
+                subtitle = "Version 1.0.0",
+                onClick = { activeDialog = "about" }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+
+    // Modal Dialogs for detailed settings
+    when (activeDialog) {
+        "ai" -> {
+            AlertDialog(
+                onDismissRequest = { activeDialog = null },
+                containerColor = JarvisSurface,
+                title = { Text("AI & App Settings", color = JarvisWhite, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Gemini API Key", color = JarvisSecondaryText, fontSize = 13.sp)
+                        OutlinedTextField(
+                            value = apiKeyInput,
+                            onValueChange = { apiKeyInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
+                                    Icon(
+                                        imageVector = if (apiKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = null,
+                                        tint = JarvisSecondaryText
+                                    )
+                                }
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = JarvisWhite,
+                                unfocusedTextColor = JarvisWhite,
+                                focusedBorderColor = JarvisBrightCyan,
+                                unfocusedBorderColor = JarvisBorder
                             )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = JarvisTextPrimary,
-                        unfocusedTextColor = JarvisTextPrimary,
-                        focusedBorderColor = JarvisCyan,
-                        unfocusedBorderColor = JarvisGlassBorder
-                    ),
-                    singleLine = true
-                )
+                        )
 
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Configured via Secrets panel in AI Studio or override directly here. Keys are persisted in private app storage.",
-                    color = JarvisTextSecondary,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Model Selection
-                Text(
-                    text = "ACTIVE MODEL: ${settings.modelName}",
-                    color = JarvisCyanLight,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-flash-latest").forEach { model ->
-                        val isSelected = settings.modelName == model
-                        Button(
-                            onClick = { viewModel.updateModelName(model) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSelected) JarvisCyan else JarvisGlassSurface
-                            ),
-                            shape = RoundedCornerShape(2.dp),
-                            modifier = Modifier
-                                .border(1.dp, if (isSelected) JarvisCyan else JarvisGlassBorder, RoundedCornerShape(2.dp))
+                        Text("Custom System Directive", color = JarvisSecondaryText, fontSize = 13.sp)
+                        OutlinedTextField(
+                            value = customPromptInput,
+                            onValueChange = { customPromptInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = JarvisWhite,
+                                unfocusedTextColor = JarvisWhite,
+                                focusedBorderColor = JarvisBrightCyan,
+                                unfocusedBorderColor = JarvisBorder
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    NeonButton(
+                        onClick = {
+                            viewModel.updateApiKey(apiKeyInput.trim())
+                            viewModel.updateCustomPrompt(customPromptInput.trim())
+                            Toast.makeText(context, "AI Settings saved.", Toast.LENGTH_SHORT).show()
+                            activeDialog = null
+                        },
+                        style = NeonButtonStyle.FILLED_CYAN
+                    ) {
+                        Text("Save", color = JarvisBackground, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    NeonButton(
+                        onClick = { activeDialog = null },
+                        style = NeonButtonStyle.OUTLINE_GLASS
+                    ) {
+                        Text("Cancel", color = JarvisWhite)
+                    }
+                }
+            )
+        }
+        "permissions" -> {
+            AlertDialog(
+                onDismissRequest = { activeDialog = null },
+                containerColor = JarvisSurface,
+                title = { Text("App Permissions", color = JarvisWhite, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Text("Microphone (Audio capture)", color = JarvisWhite, fontSize = 14.sp)
                             Text(
-                                text = model.replace("gemini-", "").replace("-preview", ""),
-                                color = if (isSelected) JarvisObsidian else JarvisCyan,
-                                fontSize = 10.sp,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold
+                                text = if (hasMicPermission) "GRANTED" else "DENIED",
+                                color = if (hasMicPermission) JarvisOnlineGreen else JarvisAlertRed,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
                             )
                         }
+
+                        if (!hasMicPermission) {
+                            NeonButton(
+                                onClick = { micLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                                style = NeonButtonStyle.FILLED_CYAN,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Request Mic Permission", color = JarvisBackground, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Exact Alarms & Timers", color = JarvisWhite, fontSize = 14.sp)
+                            Text("ALLOWED", color = JarvisOnlineGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Notifications", color = JarvisWhite, fontSize = 14.sp)
+                            Text("CONFIGURED", color = JarvisOnlineGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                },
+                confirmButton = {
+                    NeonButton(onClick = { activeDialog = null }, style = NeonButtonStyle.OUTLINE_GLASS) {
+                        Text("Close", color = JarvisWhite)
                     }
                 }
-            }
+            )
+        }
+        "appearance" -> {
+            AlertDialog(
+                onDismissRequest = { activeDialog = null },
+                containerColor = JarvisSurface,
+                title = { Text("Appearance & Speech", color = JarvisWhite, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Speech Rate: ${"%.1f".format(speechRate)}x", color = JarvisWhite, fontSize = 14.sp)
+                        Slider(
+                            value = speechRate,
+                            onValueChange = {
+                                speechRate = it
+                                viewModel.setSpeechRate(it)
+                            },
+                            valueRange = 0.5f..2.0f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = JarvisBrightCyan,
+                                activeTrackColor = JarvisBrightCyan
+                            )
+                        )
 
-            // 2. VOICE SYNTHESIS SECTION
-            HudPanel(title = "Audio & Voice Pipeline") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
+                        Text("Speech Pitch: ${"%.1f".format(speechPitch)}x", color = JarvisWhite, fontSize = 14.sp)
+                        Slider(
+                            value = speechPitch,
+                            onValueChange = {
+                                speechPitch = it
+                                viewModel.setSpeechPitch(it)
+                            },
+                            valueRange = 0.5f..2.0f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = JarvisBrightCyan,
+                                activeTrackColor = JarvisBrightCyan
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    NeonButton(onClick = { activeDialog = null }, style = NeonButtonStyle.FILLED_CYAN) {
+                        Text("Done", color = JarvisBackground, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
+        }
+        "data" -> {
+            AlertDialog(
+                onDismissRequest = { activeDialog = null },
+                containerColor = JarvisSurface,
+                title = { Text("Data & Privacy", color = JarvisWhite, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = "VOICE OUTPUT (TTS)",
-                            color = JarvisTextPrimary,
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace,
+                            text = "JARVIS stores memory facts and conversation logs securely inside your local Room SQLite database.",
+                            color = JarvisSecondaryText,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "Stored Memories: ${allMemories.size}",
+                            color = JarvisBrightCyan,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            text = "Speak AI answers aloud",
-                            color = JarvisTextSecondary,
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
+                        NeonButton(
+                            onClick = {
+                                viewModel.clearAllMemories()
+                                Toast.makeText(context, "All memories wiped.", Toast.LENGTH_SHORT).show()
+                                activeDialog = null
+                            },
+                            style = NeonButtonStyle.OUTLINE_GLASS,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Clear All Memories", color = JarvisAlertRed)
+                        }
                     }
-                    Switch(
-                        checked = settings.voiceEnabled,
-                        onCheckedChange = { viewModel.setVoiceEnabled(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = JarvisCyan,
-                            checkedTrackColor = JarvisCyan.copy(alpha = 0.3f),
-                            uncheckedThumbColor = JarvisTextSecondary,
-                            uncheckedTrackColor = JarvisGlassSurface
-                        )
-                    )
+                },
+                confirmButton = {
+                    NeonButton(onClick = { activeDialog = null }, style = NeonButtonStyle.OUTLINE_GLASS) {
+                        Text("Close", color = JarvisWhite)
+                    }
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = "SPEECH RATE: ${(speechRate * 100).toInt()}%",
-                    color = JarvisCyan,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-                Slider(
-                    value = speechRate,
-                    onValueChange = {
-                        speechRate = it
-                        viewModel.setSpeechRate(it)
-                    },
-                    valueRange = 0.7f..1.6f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = JarvisCyan,
-                        activeTrackColor = JarvisCyan,
-                        inactiveTrackColor = JarvisGlassBorder
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "SPEECH PITCH: ${(speechPitch * 100).toInt()}%",
-                    color = JarvisCyan,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-                Slider(
-                    value = speechPitch,
-                    onValueChange = {
-                        speechPitch = it
-                        viewModel.setSpeechPitch(it)
-                    },
-                    valueRange = 0.7f..1.4f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = JarvisCyan,
-                        activeTrackColor = JarvisCyan,
-                        inactiveTrackColor = JarvisGlassBorder
-                    )
-                )
-            }
-
-            // 3. PERSISTENT MEMORY SECTION
-            HudPanel(title = "Neural Memory Management") {
-                Text(
-                    text = "Stored Records in Local Room Database: ${allMemories.size}",
-                    color = JarvisTextPrimary,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Button(
-                    onClick = { viewModel.clearAllMemories() },
-                    colors = ButtonDefaults.buttonColors(containerColor = JarvisAlertRed.copy(alpha = 0.2f)),
-                    shape = RoundedCornerShape(2.dp),
-                    modifier = Modifier.border(1.dp, JarvisAlertRed, RoundedCornerShape(2.dp))
-                ) {
+            )
+        }
+        "backup" -> {
+            AlertDialog(
+                onDismissRequest = { activeDialog = null },
+                containerColor = JarvisSurface,
+                title = { Text("Backup & Sync", color = JarvisWhite, fontWeight = FontWeight.Bold) },
+                text = {
                     Text(
-                        "PURGE ENTIRE MEMORY BANK",
-                        color = JarvisAlertRed,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold
+                        text = "Local backup is synced with Android system auto-backup. Your configuration and memories persist across application restarts.",
+                        color = JarvisSecondaryText,
+                        fontSize = 13.sp
                     )
-                }
-            }
-
-            // 4. PRIVACY & PERMISSIONS SECTION
-            HudPanel(title = "System Security & Permissions") {
-                PermissionRow(
-                    name = "Microphone (RECORD_AUDIO)",
-                    purpose = "Real-time speech-to-text voice recognition",
-                    isGranted = hasMicPermission,
-                    onRequest = { micLauncher.launch(Manifest.permission.RECORD_AUDIO) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                PermissionRow(
-                    name = "Telephone (CALL_PHONE)",
-                    purpose = "Direct outbound calling tool (dialer fallback used if not granted)",
-                    isGranted = hasCallPermission,
-                    onRequest = { callLauncher.launch(Manifest.permission.CALL_PHONE) }
-                )
-            }
-
-            // 5. DEVELOPER / DEBUG SECTION
-            HudPanel(title = "Developer Telemetry") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "HUD DEBUGGER OVERLAY",
-                            color = JarvisWarningAmber,
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Show live state, tool arguments & response telemetry",
-                            color = JarvisTextSecondary,
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
+                },
+                confirmButton = {
+                    NeonButton(onClick = { activeDialog = null }, style = NeonButtonStyle.FILLED_CYAN) {
+                        Text("OK", color = JarvisBackground, fontWeight = FontWeight.Bold)
                     }
-                    Switch(
-                        checked = settings.debugModeEnabled,
-                        onCheckedChange = { viewModel.setDebugMode(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = JarvisWarningAmber,
-                            checkedTrackColor = JarvisWarningAmber.copy(alpha = 0.3f)
-                        )
-                    )
                 }
-            }
-
-            // 6. ABOUT SECTION
-            HudPanel(title = "About JARVIS V1") {
-                Text(
-                    text = "JARVIS V1 — Just A Rather Very Intelligent System",
-                    color = JarvisCyan,
-                    fontSize = 13.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Version: 1.0.0 (Production Release)\nArchitecture: Clean Architecture + MVVM + Room + Jetpack Compose\nSubsystems: SpeechRecognizer, TextToSpeech, 10 Android Tools, Gemini REST, Local Intent Engine",
-                    color = JarvisTextSecondary,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    lineHeight = 16.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
+            )
+        }
+        "about" -> {
+            AlertDialog(
+                onDismissRequest = { activeDialog = null },
+                containerColor = JarvisSurface,
+                title = { Text("About JARVIS V1", color = JarvisWhite, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("JARVIS Android Assistant", color = JarvisBrightCyan, fontWeight = FontWeight.Bold)
+                        Text("Version: 1.0.0", color = JarvisWhite)
+                        Text("Engine: Whisper STT, Gemini AI & Android Automation", color = JarvisSecondaryText, fontSize = 12.sp)
+                        Text("Database: SQLite Room v1", color = JarvisSecondaryText, fontSize = 12.sp)
+                    }
+                },
+                confirmButton = {
+                    NeonButton(onClick = { activeDialog = null }, style = NeonButtonStyle.FILLED_CYAN) {
+                        Text("Close", color = JarvisBackground, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
         }
     }
 }
 
 @Composable
-private fun PermissionRow(
-    name: String,
-    purpose: String,
-    isGranted: Boolean,
-    onRequest: () -> Unit
+fun SettingsRowCard(
+    icon: ImageVector,
+    iconBg: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(JarvisGlassSurface, shape = RoundedCornerShape(2.dp))
-            .border(1.dp, JarvisGlassBorder, shape = RoundedCornerShape(2.dp))
-            .padding(10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .clip(RoundedCornerShape(16.dp))
+            .background(JarvisSurface)
+            .border(1.dp, JarvisBorderCyan, RoundedCornerShape(16.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(color = JarvisPrimaryCyan),
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (isGranted) Icons.Default.CheckCircle else Icons.Default.Security,
-                    contentDescription = null,
-                    tint = if (isGranted) JarvisOnlineGreen else JarvisWarningAmber,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = name,
-                    color = JarvisTextPrimary,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = purpose,
-                color = JarvisTextSecondary,
-                fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace
+        // Colored square icon container matching reference screen 10
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(iconBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
             )
         }
 
-        if (!isGranted) {
-            Button(
-                onClick = onRequest,
-                colors = ButtonDefaults.buttonColors(containerColor = JarvisCyan),
-                shape = RoundedCornerShape(2.dp)
-            ) {
-                Text("GRANT", color = JarvisObsidian, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .background(JarvisOnlineGreen.copy(alpha = 0.2f), shape = RoundedCornerShape(2.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    "ACTIVE",
-                    color = JarvisOnlineGreen,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+        Spacer(modifier = Modifier.width(14.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = JarvisWhite,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                color = JarvisSecondaryText,
+                fontSize = 12.sp
+            )
         }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+            contentDescription = null,
+            tint = JarvisSecondaryText.copy(alpha = 0.6f),
+            modifier = Modifier.size(14.dp)
+        )
     }
 }

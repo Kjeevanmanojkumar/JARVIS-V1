@@ -17,15 +17,28 @@ class TextToSpeechManager(
 ) : TextToSpeech.OnInitListener {
 
     private var tts: TextToSpeech? = null
-    private var isInitialized = false
+    private val _isInitialized = MutableStateFlow(false)
+    val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
+
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
 
+    private val _initError = MutableStateFlow<String?>(null)
+    val initError: StateFlow<String?> = _initError.asStateFlow()
+
     private var speechRate = 1.05f
-    private var speechPitch = 0.95f // Slightly deeper, more technical robotic timbre
+    private var speechPitch = 0.95f
+
+    // Pending utterance queue in case speak() is invoked before onInit completes
+    private val pendingQueue = mutableListOf<String>()
 
     init {
-        tts = TextToSpeech(context.applicationContext, this)
+        try {
+            tts = TextToSpeech(context.applicationContext, this)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to instantiate TextToSpeech", e)
+            _initError.value = "Failed to instantiate TTS service: ${e.message}"
+        }
     }
 
     override fun onInit(status: Int) {
@@ -49,39 +62,72 @@ class TextToSpeechManager(
                     onStateChange(false)
                 }
 
+                @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
                     _isSpeaking.value = false
                     onStateChange(false)
                     Log.e(TAG, "TTS Utterance error for id: $utteranceId")
                 }
+
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    _isSpeaking.value = false
+                    onStateChange(false)
+                    Log.e(TAG, "TTS Utterance error code $errorCode for id: $utteranceId")
+                }
             })
 
-            isInitialized = true
-            Log.d(TAG, "TTS successfully initialized")
+            _isInitialized.value = true
+            _initError.value = null
+            Log.d(TAG, "TextToSpeech successfully initialized")
+
+            // Process any pending utterances
+            synchronized(pendingQueue) {
+                if (pendingQueue.isNotEmpty()) {
+                    val queued = pendingQueue.toList()
+                    pendingQueue.clear()
+                    for (text in queued) {
+                        speak(text, flush = false)
+                    }
+                }
+            }
         } else {
-            Log.e(TAG, "TTS initialization failed with code: $status")
-            isInitialized = false
+            val errMsg = "TextToSpeech initialization failed with code: $status"
+            Log.e(TAG, errMsg)
+            _isInitialized.value = false
+            _initError.value = errMsg
+            synchronized(pendingQueue) {
+                pendingQueue.clear()
+            }
         }
     }
 
     fun setSpeechRate(rate: Float) {
         speechRate = rate.coerceIn(0.5f, 2.0f)
-        if (isInitialized) {
+        if (_isInitialized.value) {
             tts?.setSpeechRate(speechRate)
         }
     }
 
     fun setSpeechPitch(pitch: Float) {
         speechPitch = pitch.coerceIn(0.5f, 2.0f)
-        if (isInitialized) {
+        if (_isInitialized.value) {
             tts?.setPitch(speechPitch)
         }
     }
 
     fun speak(text: String, flush: Boolean = true): Boolean {
-        if (!isInitialized || tts == null) {
-            Log.w(TAG, "Cannot speak: TTS not initialized yet")
-            return false
+        val clean = text.trim()
+        if (clean.isEmpty()) return false
+
+        if (!_isInitialized.value) {
+            Log.d(TAG, "TTS not initialized yet. Enqueueing utterance for deferred playback.")
+            synchronized(pendingQueue) {
+                if (flush) {
+                    pendingQueue.clear()
+                }
+                pendingQueue.add(clean)
+            }
+            return true
         }
 
         val queueMode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
@@ -90,13 +136,26 @@ class TextToSpeechManager(
             putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
         }
 
-        val result = tts?.speak(text, queueMode, params, utteranceId)
-        return result == TextToSpeech.SUCCESS
+        val result = tts?.speak(clean, queueMode, params, utteranceId)
+        val success = result == TextToSpeech.SUCCESS
+        if (!success) {
+            Log.w(TAG, "TTS speak call returned non-success code: $result")
+            _isSpeaking.value = false
+            onStateChange(false)
+        }
+        return success
     }
 
     fun stop() {
-        if (isInitialized) {
-            tts?.stop()
+        if (_isInitialized.value) {
+            try {
+                tts?.stop()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error stopping TTS", e)
+            }
+        }
+        synchronized(pendingQueue) {
+            pendingQueue.clear()
         }
         _isSpeaking.value = false
         onStateChange(false)
@@ -106,7 +165,7 @@ class TextToSpeechManager(
         stop()
         tts?.shutdown()
         tts = null
-        isInitialized = false
+        _isInitialized.value = false
     }
 
     companion object {

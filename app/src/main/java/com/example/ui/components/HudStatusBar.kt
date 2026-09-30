@@ -163,7 +163,7 @@ fun HudStatusBar(
             val stateColor = when (state) {
                 JarvisState.IDLE -> JarvisCyan
                 JarvisState.LISTENING -> Color.White
-                JarvisState.THINKING -> JarvisCyan
+                JarvisState.THINKING, JarvisState.PROCESSING -> JarvisCyan
                 JarvisState.SPEAKING -> JarvisOnlineGreen
                 JarvisState.EXECUTING -> JarvisWarningAmber
                 JarvisState.ERROR -> JarvisAlertRed

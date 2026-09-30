@@ -37,9 +37,17 @@ class MediaControlTool(private val context: Context) : JarvisTool {
             audioManager.dispatchMediaKeyEvent(downEvent)
             audioManager.dispatchMediaKeyEvent(upEvent)
 
+            val actionDesc = when (action) {
+                "pause", "stop" -> "Playback paused."
+                "play" -> "Playback command dispatched."
+                "next" -> "Skipped to next track."
+                "previous" -> "Returned to previous track."
+                else -> "Media playback toggled."
+            }
+
             ToolResult(
                 true,
-                "Media command '$action' dispatched to Android media subsystem.",
+                actionDesc,
                 mapOf("action" to action, "keyCode" to keyCode)
             )
         } catch (e: Exception) {

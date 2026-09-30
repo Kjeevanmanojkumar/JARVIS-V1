@@ -53,7 +53,7 @@ fun JarvisCore(
     val outerRotationDuration = when (state) {
         JarvisState.IDLE -> 16000
         JarvisState.LISTENING -> 8000
-        JarvisState.THINKING -> 3000
+        JarvisState.THINKING, JarvisState.PROCESSING -> 3000
         JarvisState.SPEAKING -> 6000
         JarvisState.EXECUTING -> 2000
         JarvisState.ERROR -> 12000
@@ -62,7 +62,7 @@ fun JarvisCore(
     val innerRotationDuration = when (state) {
         JarvisState.IDLE -> 12000
         JarvisState.LISTENING -> 6000
-        JarvisState.THINKING -> 2400
+        JarvisState.THINKING, JarvisState.PROCESSING -> 2400
         JarvisState.SPEAKING -> 4500
         JarvisState.EXECUTING -> 1800
         JarvisState.ERROR -> 9000
@@ -114,7 +114,7 @@ fun JarvisCore(
     val (primaryGlow, secondaryGlow, coreColor) = when (state) {
         JarvisState.IDLE -> Triple(JarvisCyan, JarvisCyanDark, JarvisCyanLight)
         JarvisState.LISTENING -> Triple(JarvisCyanLight, JarvisCyan, Color.White)
-        JarvisState.THINKING -> Triple(JarvisCyan, JarvisCyanLight, JarvisCyanDark)
+        JarvisState.THINKING, JarvisState.PROCESSING -> Triple(JarvisCyan, JarvisCyanLight, JarvisCyanDark)
         JarvisState.SPEAKING -> Triple(JarvisCyanLight, Color.White, JarvisCyan)
         JarvisState.EXECUTING -> Triple(JarvisWarningAmber, JarvisCyan, JarvisWarningAmber)
         JarvisState.ERROR -> Triple(JarvisAlertRed, Color(0xFFFF5252), JarvisAlertRed)

@@ -18,7 +18,13 @@ class LocalRuleProvider : AiProvider {
         val lastUserMessage = messages.lastOrNull { it.role.equals("USER", ignoreCase = true) }?.content?.trim()
             ?: return AiResponse("JARVIS core online. Awaiting your instructions, sir.")
 
-        val input = lastUserMessage.lowercase()
+        val rawClean = lastUserMessage.trimEnd('.', '!', '?', ',', ';').trim()
+        val input = rawClean.lowercase()
+
+        // 0. Stop speaking command
+        if (input == "stop speaking" || input == "stop talking" || input == "silence" || input == "quiet") {
+            return AiResponse("Speech synthesis halted.")
+        }
 
         // 1. Time / Date queries
         if (input.contains("what time") || input.contains("current time") || input.contains("time is it") || input.contains("what's the time")) {
@@ -35,7 +41,7 @@ class LocalRuleProvider : AiProvider {
         }
 
         // 2. Battery / Device status
-        if (input.contains("battery") || input.contains("battery percentage") || input.contains("charge level") || input.contains("power level")) {
+        if (input.contains("battery") || input.contains("charge level") || input.contains("power level") || input.contains("battery percentage")) {
             return AiResponse(
                 text = "Querying power telemetry...",
                 toolCall = AiToolCall("get_device_status", mapOf("metric" to "battery"))
@@ -54,8 +60,8 @@ class LocalRuleProvider : AiProvider {
             )
         }
 
-        // 3. Open Settings
-        if (input.contains("setting") || input.contains("wifi") || input.contains("wi-fi") || input.contains("bluetooth")) {
+        // 3. Settings specific commands (Wi-Fi, Bluetooth, etc.)
+        if (input.contains("wi-fi") || input.contains("wifi") || input.contains("bluetooth") || (input.contains("setting") && !input.contains("remember"))) {
             val settingType = when {
                 input.contains("wifi") || input.contains("wi-fi") || input.contains("internet") -> "wifi"
                 input.contains("bluetooth") -> "bluetooth"
@@ -72,7 +78,7 @@ class LocalRuleProvider : AiProvider {
             )
         }
 
-        // 4. Timer
+        // 4. Timer commands
         if (input.contains("timer")) {
             var seconds = 600 // default 10 minutes
             val minPattern = Pattern.compile("(\\d+)\\s*(?:minute|min|m)")
@@ -94,7 +100,7 @@ class LocalRuleProvider : AiProvider {
             )
         }
 
-        // 5. Alarm
+        // 5. Alarm commands
         if (input.contains("alarm")) {
             var hour = 6
             var min = 0
@@ -112,35 +118,12 @@ class LocalRuleProvider : AiProvider {
             )
         }
 
-        // 6. App Launch
-        if (input.startsWith("open ") || input.startsWith("launch ") || input.startsWith("start ")) {
-            val appTarget = input.removePrefix("open ").removePrefix("launch ").removePrefix("start ").trim()
-            if (appTarget.isNotEmpty()) {
-                // If it's a URL
-                if (appTarget.contains(".com") || appTarget.contains(".org") || appTarget.contains(".io") || appTarget.contains("http")) {
-                    return AiResponse(
-                        text = "Navigating to $appTarget...",
-                        toolCall = AiToolCall("open_url", mapOf("url" to appTarget))
-                    )
-                }
-                return AiResponse(
-                    text = "Initiating application launch sequence for $appTarget...",
-                    toolCall = AiToolCall("open_app", mapOf("app_name" to appTarget))
-                )
-            }
-        }
-
-        // 7. Make Call
-        if (input.startsWith("call ") || input.startsWith("dial ")) {
-            val target = input.removePrefix("call ").removePrefix("dial ").trim()
-            return AiResponse(
-                text = "Preparing telecommunication link to $target...",
-                toolCall = AiToolCall("make_call", mapOf("phone_number" to target, "direct_call" to false))
-            )
-        }
-
-        // 8. Media control
-        if (input.contains("play music") || input.contains("pause music") || input.contains("next song") || input.contains("previous song") || input.contains("stop music")) {
+        // 6. Media control commands (Pause, Play, Next, Previous, etc.)
+        if (input == "pause" || input == "pause music" || input == "stop music" ||
+            input == "play" || input == "play music" || input == "play my music" ||
+            input == "next" || input == "next song" || input == "skip" ||
+            input == "previous" || input == "previous song" || input == "back"
+        ) {
             val action = when {
                 input.contains("pause") || input.contains("stop") -> "pause"
                 input.contains("next") || input.contains("skip") -> "next"
@@ -153,31 +136,34 @@ class LocalRuleProvider : AiProvider {
             )
         }
 
-        // 9. Web Search
+        // 7. Web Search commands
         if (input.startsWith("search ") || input.contains("search the web") || input.startsWith("google ")) {
-            val query = input.removePrefix("search the web for ")
-                .removePrefix("search the web ")
-                .removePrefix("search for ")
-                .removePrefix("search ")
-                .removePrefix("google ")
-                .trim()
+            val prefixRegex = "(?i)^(?:search\\s+the\\s+web\\s+for\\s+|search\\s+the\\s+web\\s+|search\\s+for\\s+|search\\s+|google\\s+)".toRegex()
+            val query = rawClean.replace(prefixRegex, "").trim()
             return AiResponse(
-                text = "Searching the global network for '$query'...",
+                text = "Searching the web for '$query'...",
                 toolCall = AiToolCall("web_search", mapOf("query" to query))
             )
         }
 
-        // 10. Memory commands
+        // 8. Memory: Store / Remember
         if (input.startsWith("remember that ") || input.startsWith("remember ") || input.startsWith("store ")) {
-            val memContent = input.removePrefix("remember that ").removePrefix("remember ").removePrefix("store ").trim()
-            // e.g. "my project is called Myraa" or "my name is Bob"
-            val isCalledMatcher = Pattern.compile("my (\\w+) is called (.+)", Pattern.CASE_INSENSITIVE).matcher(memContent)
-            val isMatcher = Pattern.compile("my (\\w+) is (.+)", Pattern.CASE_INSENSITIVE).matcher(memContent)
+            val prefixRegex = "(?i)^(?:remember\\s+that\\s+|remember\\s+|store\\s+)".toRegex()
+            val rawMemContent = rawClean.replace(prefixRegex, "").trim()
+
+            // Handle patterns like:
+            // "my android project is called JARVIS"
+            // "my project is called JARVIS"
+            // "my name is Bob"
+            val isCalledMatcher = Pattern.compile("my (.+?) is called (.+)", Pattern.CASE_INSENSITIVE).matcher(rawMemContent)
+            val isNamedMatcher = Pattern.compile("my (.+?) is named (.+)", Pattern.CASE_INSENSITIVE).matcher(rawMemContent)
+            val isMatcher = Pattern.compile("my (.+?) is (.+)", Pattern.CASE_INSENSITIVE).matcher(rawMemContent)
 
             val (k, v, cat) = when {
-                isCalledMatcher.find() -> Triple(isCalledMatcher.group(1) ?: "item", isCalledMatcher.group(2) ?: memContent, "PROJECT")
-                isMatcher.find() -> Triple(isMatcher.group(1) ?: "item", isMatcher.group(2) ?: memContent, "PERSONAL_CONTEXT")
-                else -> Triple("note", memContent, "GENERAL")
+                isCalledMatcher.find() -> Triple(isCalledMatcher.group(1)?.trim() ?: "item", isCalledMatcher.group(2)?.trim() ?: rawMemContent, "PROJECT")
+                isNamedMatcher.find() -> Triple(isNamedMatcher.group(1)?.trim() ?: "item", isNamedMatcher.group(2)?.trim() ?: rawMemContent, "PROJECT")
+                isMatcher.find() -> Triple(isMatcher.group(1)?.trim() ?: "item", isMatcher.group(2)?.trim() ?: rawMemContent, "PERSONAL_CONTEXT")
+                else -> Triple("note", rawMemContent, "GENERAL")
             }
 
             return AiResponse(
@@ -189,12 +175,14 @@ class LocalRuleProvider : AiProvider {
             )
         }
 
-        if (input.contains("what did i tell you about") || input.contains("what is my") || input.contains("what's my") || input.contains("recall")) {
+        // 9. Memory: Recall
+        if (input.contains("what did i tell you about") || input.contains("what is my") || input.contains("what's my") || input.startsWith("recall ")) {
             val key = when {
+                input.contains("android project") -> "Android project"
                 input.contains("project") -> "project"
                 input.contains("name") -> "name"
                 input.contains("car") -> "car"
-                else -> ""
+                else -> input.removePrefix("what is my ").removePrefix("what's my ").removePrefix("recall ").replace(" called", "").replace(" name", "").trim()
             }
             return AiResponse(
                 text = "Searching neural memory records...",
@@ -202,15 +190,49 @@ class LocalRuleProvider : AiProvider {
             )
         }
 
+        // 10. Memory: Forget / Delete
         if (input.startsWith("forget ") || input.contains("delete memory") || input.contains("purge memory")) {
             val key = when {
+                input.contains("android project") -> "Android project"
                 input.contains("project") -> "project"
                 input.contains("name") -> "name"
-                else -> input.removePrefix("forget ").removePrefix("delete memory ").trim()
+                else -> input.removePrefix("forget ").removePrefix("delete memory ").replace(" name", "").trim()
             }
             return AiResponse(
                 text = "Purging memory entry...",
                 toolCall = AiToolCall("manage_memory", mapOf("action" to "forget", "key" to key))
+            )
+        }
+
+        // 11. App Launch & URLs
+        if (input.startsWith("open ") || input.startsWith("launch ") || input.startsWith("start ")) {
+            val appTarget = input.removePrefix("open ").removePrefix("launch ").removePrefix("start ").trim()
+            if (appTarget.isNotEmpty()) {
+                // If it's a known URL or web target
+                if (appTarget == "google" || appTarget == "github" || appTarget.contains(".com") || appTarget.contains(".org") || appTarget.contains(".io") || appTarget.contains("http")) {
+                    val url = when (appTarget) {
+                        "google" -> "https://google.com"
+                        "github" -> "https://github.com"
+                        else -> appTarget
+                    }
+                    return AiResponse(
+                        text = "Navigating to $url...",
+                        toolCall = AiToolCall("open_url", mapOf("url" to url))
+                    )
+                }
+                return AiResponse(
+                    text = "Initiating application launch sequence for $appTarget...",
+                    toolCall = AiToolCall("open_app", mapOf("app_name" to appTarget))
+                )
+            }
+        }
+
+        // 12. Make Call
+        if (input.startsWith("call ") || input.startsWith("dial ")) {
+            val target = input.removePrefix("call ").removePrefix("dial ").trim()
+            return AiResponse(
+                text = "Preparing telecommunication link to $target...",
+                toolCall = AiToolCall("make_call", mapOf("phone_number" to target, "direct_call" to false))
             )
         }
 
@@ -225,16 +247,16 @@ class LocalRuleProvider : AiProvider {
 
         if (input.contains("what can you do") || input.contains("help") || input.contains("capabilities") || input.contains("features")) {
             return AiResponse("I can execute 10 Android system protocols:\n" +
-                    "• Open installed apps ('Open YouTube')\n" +
+                    "• Open installed apps ('Open WhatsApp', 'Open YouTube', 'Open Chrome')\n" +
                     "• Browse web URLs ('Open GitHub')\n" +
                     "• Place phone calls ('Call Mom')\n" +
-                    "• Set alarms & timers ('Set a timer for 10 minutes')\n" +
-                    "• Open system settings ('Open Wi-Fi settings')\n" +
+                    "• Set alarms & timers ('Set a timer for 10 minutes', 'Set an alarm for 6 AM')\n" +
+                    "• Open system settings ('Open Wi-Fi settings', 'Open Bluetooth settings')\n" +
                     "• Report live battery and device status\n" +
                     "• Report accurate local time & date\n" +
-                    "• Control media playback\n" +
-                    "• Perform web searches\n" +
-                    "• Store & recall long-term memories ('Remember my project is called Myraa')")
+                    "• Control media playback ('Pause', 'Play', 'Next')\n" +
+                    "• Perform web searches ('Search the web for Kotlin coroutines')\n" +
+                    "• Store & recall long-term memories ('Remember my Android project is called JARVIS')")
         }
 
         if (input.contains("thank you") || input.contains("thanks")) {
